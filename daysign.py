@@ -5,15 +5,14 @@ import random
 import uncurl
 import requests
 from bs4 import BeautifulSoup
+import tg_bot
 
 SEHUATANG_HOST = 'www.sehuatang.net'
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36'
 
 
 def daysign(cookies: dict) -> bool:
-
     with requests.Session() as session:
-
         def _request(method, url, *args, **kwargs):
             with session.request(method=method, url=url, cookies=cookies,
                                  headers={
@@ -42,7 +41,8 @@ def daysign(cookies: dict) -> bool:
             action = soup.find('form', {'name': 'login'})['action']
 
         # GET: https://www.sehuatang.net/misc.php?mod=secqaa&action=update&idhash=qS0&0.2010053552105764
-        with _request(method='get', url=f'https://{SEHUATANG_HOST}/misc.php?mod=secqaa&action=update&idhash={id_hash}&{round(random.random(), 16)}') as r:
+        with _request(method='get',
+                      url=f'https://{SEHUATANG_HOST}/misc.php?mod=secqaa&action=update&idhash={id_hash}&{round(random.random(), 16)}') as r:
             qes_rsl = re.findall(r"'(.*?) = \?'", r.text,
                                  re.MULTILINE | re.IGNORECASE)
 
@@ -61,8 +61,16 @@ def daysign(cookies: dict) -> bool:
             return r.text
 
 
-def retrieve_cookies_from_curl(env: str) -> dict:
-    cURL = os.getenv(env, '').replace('\\', '')
+def get_cURL_data() -> str:
+    path = 'cURL.txt'
+    f = open(path, 'r')
+    data = f.read()
+    f.close()
+    return data
+
+
+def retrieve_cookies_from_curl() -> dict:
+    cURL = get_cURL_data().replace('\\', '')
     return uncurl.parse_context(curl_command=cURL).cookies
 
 
@@ -80,9 +88,8 @@ def telegram_send_message(text: str, chat_id: str, token: str, silent: bool = Fa
 
 
 def main():
-    cookies = retrieve_cookies_from_curl('CURL')
+    cookies = retrieve_cookies_from_curl()
     raw_html = daysign(cookies=cookies)
-
     try:
         if '签到成功' in raw_html:
             message_text = re.findall(
@@ -105,6 +112,10 @@ def main():
     # telegram notify
     chat_id = os.getenv('CHAT_ID')
     bot_token = os.getenv('BOT_TOKEN')
+    if chat_id is None and bot_token is None:
+        chat_id = tg_bot.CHAT_ID
+        bot_token = tg_bot.BOT_TOKEN
+
     if chat_id and bot_token:
         telegram_send_message(message_text, chat_id, bot_token, silent=(
             True if '签到成功' in message_text else False))
